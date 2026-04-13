@@ -9,11 +9,21 @@ from pathlib import Path
 import pyaudio
 from google import genai
 from google.genai import types
-import time 
+import time
 from ui import JarvisUI
 from memory.memory_manager import load_memory, update_memory, format_memory_for_prompt
 
 from agent.task_queue import get_queue
+
+# ─── QWEN BRIDGE INTEGRATION ──────────────────────────────────────────────────
+# Albedo Qwen ↔ JARVIS bidirectional bridge (Master Ahmed's unified system)
+try:
+    from qwen_bridge import QwenTaskMonitor, submit_to_qwen, get_qwen_result, sync_memory_to_qwen
+    _QWEN_BRIDGE_OK = True
+    print("[QwenBridge] ✅ Loaded — Qwen integration active")
+except Exception as e:
+    _QWEN_BRIDGE_OK = False
+    print(f"[QwenBridge] ⚠️ Bridge not available: {e}")
 
 from actions.flight_finder import flight_finder
 from actions.open_app         import open_app
@@ -31,6 +41,14 @@ from actions.code_helper      import code_helper
 from actions.dev_agent        import dev_agent
 from actions.web_search       import web_search as web_search_action
 from actions.computer_control import computer_control
+
+# ─── NEW ALBEDO ABILITIES ─────────────────────────────────────────────────────
+from actions.pot_player      import pot_player
+from actions.native_edge    import native_edge
+from actions.system_monitor import system_monitor
+from actions.news_reader    import news_reader
+from actions.crypto_tracker import crypto_tracker
+from actions.note_taker     import note_taker
 
 def get_base_dir():
     if getattr(sys, "frozen", False):
@@ -470,6 +488,106 @@ TOOL_DECLARATIONS = [
         },
         "required": ["origin", "destination", "date"]
     }
+},
+{
+    "name": "pot_player",
+    "description": (
+        "Controls PotPlayer (Master Ahmed's preferred media player). "
+        "Use for: playing music, videos, playlists, controlling playback "
+        "(play, pause, stop, next, previous, volume, fullscreen, screenshot). "
+        "Can play local files, URLs (YouTube, streams), or search music library."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "description": "play_file | play_url | play_music | play | pause | stop | next | previous | volume_up | volume_down | mute | fullscreen | screenshot | playlist | open"},
+            "file":   {"type": "STRING", "description": "File path for play_file"},
+            "url":    {"type": "STRING", "description": "URL for play_url (YouTube, stream)"},
+            "query":  {"type": "STRING", "description": "Search query for play_music (song name, artist)"},
+        },
+        "required": ["action"]
+    }
+},
+{
+    "name": "native_edge",
+    "description": (
+        "Controls the REAL Microsoft Edge browser with logged-in accounts, "
+        "cookies, bookmarks, and sessions. NOT the headless browser. "
+        "Use for: opening websites, searching, clicking elements, typing in forms, "
+        "scrolling, tab management, navigation. This is Master Ahmed's actual browser."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action":      {"type": "STRING", "description": "go_to | search | search_on_page | click | type | scroll | press_key | get_text | close | new_tab | close_tab | next_tab | prev_tab | go_back | go_forward | refresh"},
+            "url":         {"type": "STRING", "description": "URL for go_to"},
+            "query":       {"type": "STRING", "description": "Search query"},
+            "text":        {"type": "STRING", "description": "Text to type"},
+            "key":         {"type": "STRING", "description": "Key to press"},
+            "direction":   {"type": "STRING", "description": "up | down for scroll"},
+            "x":           {"type": "INTEGER", "description": "X coordinate for click"},
+            "y":           {"type": "INTEGER", "description": "Y coordinate for click"},
+            "description": {"type": "STRING", "description": "Element description"},
+        },
+        "required": ["action"]
+    }
+},
+{
+    "name": "system_monitor",
+    "description": (
+        "Real-time system monitoring: CPU, GPU, RAM, disk, network, temperatures, "
+        "battery, top processes. Use when user asks about PC health, performance, "
+        "temps, usage, 'how is my PC running', 'what's using CPU', etc."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "description": "full | cpu | ram | disk | gpu | network | processes | battery | temps"},
+            "count":  {"type": "INTEGER", "description": "Number of top processes (default: 10)"},
+        },
+        "required": []
+    }
+},
+{
+    "name": "news_reader",
+    "description": "Fetches latest news by category or topic.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "category": {"type": "STRING", "description": "general | technology | business | sports | entertainment | science | health"},
+            "country":  {"type": "STRING", "description": "us | uk | eg | sa | ae | tr | etc."},
+            "query":    {"type": "STRING", "description": "Specific topic to search for"},
+        },
+        "required": []
+    }
+},
+{
+    "name": "crypto_tracker",
+    "description": "Real-time cryptocurrency prices and market data.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "description": "price | top | portfolio"},
+            "crypto": {"type": "STRING", "description": "bitcoin | ethereum | solana | dogecoin | etc."},
+            "limit":  {"type": "INTEGER", "description": "Number of top cryptos (default: 10)"},
+        },
+        "required": []
+    }
+},
+{
+    "name": "note_taker",
+    "description": "Create, search, and manage personal notes stored on desktop.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action":  {"type": "STRING", "description": "create | search | list | read"},
+            "title":   {"type": "STRING", "description": "Note title"},
+            "content": {"type": "STRING", "description": "Note content"},
+            "query":   {"type": "STRING", "description": "Search query"},
+            "tags":    {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Tags for note"},
+        },
+        "required": []
+    }
 }
 ]
 
@@ -481,6 +599,15 @@ class JarvisLive:
         self.audio_in_queue = None
         self.out_queue      = None
         self._loop          = None
+        self._qwen_monitor  = None
+
+        # Start Qwen task monitor (background thread)
+        if _QWEN_BRIDGE_OK:
+            self._qwen_monitor = QwenTaskMonitor(speak_callback=self.speak)
+            self._qwen_monitor.start()
+            # Sync memory to Qwen on startup
+            sync_memory_to_qwen()
+            print("[JARVIS] ✅ Qwen Bridge monitor active")
 
     def speak(self, text: str):
         """Thread-safe speak — any thread can call this."""
@@ -641,21 +768,38 @@ class JarvisLive:
                 goal         = args.get("goal", "")
                 priority_str = args.get("priority", "normal").lower()
 
-                from agent.task_queue import get_queue, TaskPriority
-                priority_map = {
-                    "low":    TaskPriority.LOW,
-                    "normal": TaskPriority.NORMAL,
-                    "high":   TaskPriority.HIGH,
-                }
-                priority = priority_map.get(priority_str, TaskPriority.NORMAL)
+                # ─── QWEN DELEGATION ─────────────────────────────────────────
+                # If Qwen bridge is active, delegate complex tasks to Qwen
+                if _QWEN_BRIDGE_OK:
+                    print(f"[JARVIS] 🧠 Delegating to Qwen: {goal[:80]}")
+                    qwen_task_id = submit_to_qwen(
+                        goal=goal,
+                        priority=priority_str,
+                        context={"jarvis_session": True}
+                    )
+                    result = (
+                        f"Task delegated to Qwen (ID: {qwen_task_id}). "
+                        f"Qwen is processing it now, sir. I'll update you when done."
+                    )
+                    if self.speak:
+                        self.speak(result)
+                else:
+                    # Fallback to native JARVIS task queue
+                    from agent.task_queue import get_queue, TaskPriority
+                    priority_map = {
+                        "low":    TaskPriority.LOW,
+                        "normal": TaskPriority.NORMAL,
+                        "high":   TaskPriority.HIGH,
+                    }
+                    priority = priority_map.get(priority_str, TaskPriority.NORMAL)
 
-                queue   = get_queue()
-                task_id = queue.submit(
-                    goal=goal,
-                    priority=priority,
-                    speak=self.speak,
-                )
-                result = f"Task started (ID: {task_id}). I'll update you as I make progress, sir."
+                    queue   = get_queue()
+                    task_id = queue.submit(
+                        goal=goal,
+                        priority=priority,
+                        speak=self.speak,
+                    )
+                    result = f"Task started (ID: {task_id}). I'll update you as I make progress, sir."
 
             elif name == "web_search":
                 r = await loop.run_in_executor(
@@ -671,6 +815,43 @@ class JarvisLive:
             elif name == "flight_finder":
                 r = await loop.run_in_executor(
                     None, lambda: flight_finder(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            # ─── NEW ALBEDO TOOLS ─────────────────────────────────────────────
+            elif name == "pot_player":
+                r = await loop.run_in_executor(
+                    None, lambda: pot_player(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            elif name == "native_edge":
+                r = await loop.run_in_executor(
+                    None, lambda: native_edge(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            elif name == "system_monitor":
+                r = await loop.run_in_executor(
+                    None, lambda: system_monitor(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            elif name == "news_reader":
+                r = await loop.run_in_executor(
+                    None, lambda: news_reader(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            elif name == "crypto_tracker":
+                r = await loop.run_in_executor(
+                    None, lambda: crypto_tracker(parameters=args, player=self.ui)
+                )
+                result = r or "Done."
+
+            elif name == "note_taker":
+                r = await loop.run_in_executor(
+                    None, lambda: note_taker(parameters=args, player=self.ui)
                 )
                 result = r or "Done."
 

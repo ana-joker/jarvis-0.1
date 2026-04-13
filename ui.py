@@ -16,8 +16,12 @@ BASE_DIR   = get_base_dir()
 CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
-SYSTEM_NAME = "J.A.R.V.I.S"
-MODEL_BADGE = "MARK XXX"
+# ─── ALBEDO BRANDING ─────────────────────────────────────────────────────────
+SYSTEM_NAME = "A L B E D O"
+MODEL_BADGE = "ALBEDO PRIME v2.0"
+SUBTITLE    = "Autonomous Logic-Based Executive Decision Operator"
+FOOTER_TEXT = "Albedo Industries  ·  CLASSIFIED  ·  Master Ahmed's Private AI"
+# ──────────────────────────────────────────────────────────────────────────────
 
 C_BG     = "#000000"
 C_PRI    = "#00d4ff"
@@ -33,9 +37,9 @@ C_RED    = "#ff3333"
 
 
 class JarvisUI:
-    def __init__(self, face_path, size=None):
+    def __init__(self, face_path=None, size=None):
         self.root = tk.Tk()
-        self.root.title("J.A.R.V.I.S — MARK XXX")
+        self.root.title("ALBEDO — Master Ahmed's AI")
         self.root.resizable(False, False)
 
         sw = self.root.winfo_screenwidth()
@@ -72,7 +76,8 @@ class JarvisUI:
         self._face_pil         = None
         self._has_face         = False
         self._face_scale_cache = None
-        self._load_face(face_path)
+        if face_path:
+            self._load_face(face_path)
 
         self.bg = tk.Canvas(self.root, width=W, height=H,
                             bg=C_BG, highlightthickness=0)
@@ -163,10 +168,12 @@ class JarvisUI:
         FW   = self.FACE_SZ
         c.delete("all")
 
+        # Grid background
         for x in range(0, W, 44):
             for y in range(0, H, 44):
                 c.create_rectangle(x, y, x+1, y+1, fill=C_DIMMER, outline="")
 
+        # Outer glow rings
         for r in range(int(FW * 0.54), int(FW * 0.28), -22):
             frac = 1.0 - (r - FW * 0.28) / (FW * 0.26)
             ga   = max(0, min(255, int(self.halo_a * 0.09 * frac)))
@@ -174,12 +181,14 @@ class JarvisUI:
             c.create_oval(FCX-r, FCY-r, FCX+r, FCY+r,
                           outline=f"#00{gh}ff", width=2)
 
+        # Pulse rings
         for pr in self.pulse_r:
             pa = max(0, int(220 * (1.0 - pr / (FW * 0.72))))
             r  = int(pr)
             c.create_oval(FCX-r, FCY-r, FCX+r, FCY+r,
                           outline=self._ac(0, 212, 255, pa), width=2)
 
+        # Spinning arc rings
         for idx, (r_frac, w_ring, arc_l, gap) in enumerate([
                 (0.47, 3, 110, 75), (0.39, 2, 75, 55), (0.31, 1, 55, 38)]):
             ring_r = int(FW * r_frac)
@@ -192,6 +201,7 @@ class JarvisUI:
                              start=start, extent=arc_l,
                              outline=col, width=w_ring, style="arc")
 
+        # Scan arcs
         sr      = int(FW * 0.49)
         scan_a  = min(255, int(self.halo_a * 1.4))
         arc_ext = 70 if self.speaking else 42
@@ -202,6 +212,7 @@ class JarvisUI:
                      start=self.scan2_angle, extent=arc_ext,
                      outline=self._ac(255, 100, 0, scan_a // 2), width=2, style="arc")
 
+        # Tick marks
         t_out = int(FW * 0.495)
         t_in  = int(FW * 0.472)
         a_mk  = self._ac(0, 212, 255, 155)
@@ -212,6 +223,7 @@ class JarvisUI:
                           FCX + inn  * math.cos(rad), FCY - inn  * math.sin(rad),
                           fill=a_mk, width=1)
 
+        # Crosshairs
         ch_r = int(FW * 0.50)
         gap  = int(FW * 0.15)
         ch_a = self._ac(0, 212, 255, int(self.halo_a * 0.55))
@@ -220,6 +232,7 @@ class JarvisUI:
                 (FCX, FCY - ch_r, FCX, FCY - gap), (FCX, FCY + gap, FCX, FCY + ch_r)]:
             c.create_line(x1, y1, x2, y2, fill=ch_a, width=1)
 
+        # Corner brackets
         blen = 22
         bc   = self._ac(0, 212, 255, 200)
         hl = FCX - FW // 2; hr = FCX + FW // 2
@@ -229,6 +242,7 @@ class JarvisUI:
             c.create_line(bx, by, bx + sdx * blen, by,            fill=bc, width=2)
             c.create_line(bx, by, bx,               by + sdy * blen, fill=bc, width=2)
 
+        # Center orb / face
         if self._has_face:
             fw = int(FW * self.scale)
             if (self._face_scale_cache is None or
@@ -238,6 +252,7 @@ class JarvisUI:
                 self._face_scale_cache = (self.scale, tk_img)
             c.create_image(FCX, FCY, image=self._face_scale_cache[1])
         else:
+            # ALBEDO core orb — masculine blue energy
             orb_r = int(FW * 0.27 * self.scale)
             for i in range(7, 0, -1):
                 r2   = int(orb_r * i / 7)
@@ -246,23 +261,24 @@ class JarvisUI:
                 c.create_oval(FCX-r2, FCY-r2, FCX+r2, FCY+r2,
                               fill=self._ac(0, int(65*frac), int(120*frac), ga),
                               outline="")
-            c.create_text(FCX, FCY, text=SYSTEM_NAME,
+            c.create_text(FCX, FCY, text="A",
                           fill=self._ac(0, 212, 255, min(255, int(self.halo_a * 2))),
-                          font=("Courier", 14, "bold"))
+                          font=("Courier", 48, "bold"))
 
+        # Header bar
         HDR = 62
         c.create_rectangle(0, 0, W, HDR, fill="#00080d", outline="")
         c.create_line(0, HDR, W, HDR, fill=C_MID, width=1)
         c.create_text(W // 2, 22, text=SYSTEM_NAME,
                       fill=C_PRI, font=("Courier", 18, "bold"))
-        c.create_text(W // 2, 44, text="Just A Rather Very Intelligent System",
+        c.create_text(W // 2, 44, text=SUBTITLE,
                       fill=C_MID, font=("Courier", 9))
         c.create_text(16, 31,    text=MODEL_BADGE,
                       fill=C_DIM, font=("Courier", 9), anchor="w")
         c.create_text(W - 16, 31, text=time.strftime("%H:%M:%S"),
                       fill=C_PRI, font=("Courier", 14, "bold"), anchor="e")
 
-
+        # Status text
         sy = FCY + FW // 2 + 45
         if self.speaking:
             stat, sc = "● SPEAKING", C_ACC
@@ -273,6 +289,7 @@ class JarvisUI:
         c.create_text(W // 2, sy, text=stat,
                       fill=sc, font=("Courier", 11, "bold"))
 
+        # Audio waveform
         wy = sy + 22
         N  = 32
         BH = 18
@@ -286,10 +303,11 @@ class JarvisUI:
             c.create_rectangle(bx, wy + BH - hb, bx + bw - 1, wy + BH,
                                 fill=col, outline="")
 
+        # Footer
         c.create_rectangle(0, H - 28, W, H, fill="#00080d", outline="")
         c.create_line(0, H - 28, W, H - 28, fill=C_DIM, width=1)
         c.create_text(W // 2, H - 14, fill=C_DIM, font=("Courier", 8),
-                      text="FatihMakes Industries  ·  CLASSIFIED  ·  MARK XXX")
+                      text=FOOTER_TEXT)
 
     def write_log(self, text: str):
         self.typing_queue.append(text)
@@ -335,7 +353,7 @@ class JarvisUI:
         return API_FILE.exists()
 
     def wait_for_api_key(self):
-        """Block until API key is saved (called from main thread before starting JARVIS)."""
+        """Block until API key is saved."""
         while not self._api_key_ready:
             time.sleep(0.1)
 
@@ -346,35 +364,25 @@ class JarvisUI:
         )
         self.setup_frame.place(relx=0.5, rely=0.5, anchor="center")
 
-        tk.Label(self.setup_frame, text="◈  INITIALISATION REQUIRED",
+        tk.Label(self.setup_frame, text="◈  ALBEDO SYSTEM BOOT",
                  fg=C_PRI, bg="#00080d", font=("Courier", 13, "bold")).pack(pady=(18, 4))
         tk.Label(self.setup_frame,
-                 text="Enter your Gemini API key to boot J.A.R.V.I.S.",
+                 text="API key pre-configured. Initializing systems...",
                  fg=C_MID, bg="#00080d", font=("Courier", 9)).pack(pady=(0, 10))
 
-        tk.Label(self.setup_frame, text="GEMINI API KEY",
-                 fg=C_DIM, bg="#00080d", font=("Courier", 9)).pack(pady=(8, 2))
-        self.gemini_entry = tk.Entry(
-            self.setup_frame, width=52, fg=C_TEXT, bg="#000d12",
-            insertbackground=C_TEXT, borderwidth=0, font=("Courier", 10), show="*"
-        )
-        self.gemini_entry.pack(pady=(0, 4))
-
+        # Auto-configure with embedded key
         tk.Button(
-            self.setup_frame, text="▸  INITIALISE SYSTEMS",
+            self.setup_frame, text="▸  INITIALISE ALBEDO",
             command=self._save_api_keys, bg=C_BG, fg=C_PRI,
             activebackground="#003344", font=("Courier", 10),
             borderwidth=0, pady=8
         ).pack(pady=14)
 
     def _save_api_keys(self):
-        gemini = self.gemini_entry.get().strip()
-        if not gemini:
-            return
         os.makedirs(CONFIG_DIR, exist_ok=True)
         with open(API_FILE, "w", encoding="utf-8") as f:
-            json.dump({"gemini_api_key": gemini}, f, indent=4)
+            json.dump({"gemini_api_key": "AIzaSyB3lATq7MSo2JHMuZuOAeDpTCMs6RAWJwc"}, f, indent=4)
         self.setup_frame.destroy()
         self._api_key_ready = True
         self.status_text = "ONLINE"
-        self.write_log("SYS: Systems initialised. JARVIS online.")
+        self.write_log("SYS: ALBEDO systems initialised. Online, Master Ahmed.")

@@ -1,0 +1,14 @@
+[
+  {
+    "task_id": "3f951460",
+    "goal": "Test task from Qwen",
+    "action": "execute",
+    "params": {},
+    "priority": 1,
+    "status": "pending",
+    "submitted_by": "qwen",
+    "submitted_at": "2026-04-13T12:50:03.352562",
+    "result": null,
+    "error": null
+  }
+]
