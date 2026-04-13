@@ -26,7 +26,7 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 API_FILE = CONFIG_DIR / "api_keys.json"
 
 api_config = {
-    "gemini_api_key": "AIzaSyB3lATq7MSo2JHMuZuOAeDpTCMs6RAWJwc"
+    "gemini_api_key": ""
 }
 API_FILE.write_text(json.dumps(api_config, indent=4), encoding="utf-8")
 print(f"✅ API key saved to: {API_FILE}")
