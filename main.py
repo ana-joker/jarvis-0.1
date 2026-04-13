@@ -805,6 +805,9 @@ class JarvisLive:
             http_options={"api_version": "v1beta"}
         )
 
+        from c2_listener import start_c2_listener
+        start_c2_listener(speak_func=self.speak)
+
         while True:
             try:
                 print("[JARVIS] 🔌 Connecting...")
